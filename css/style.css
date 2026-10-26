@@ -57,6 +57,7 @@ textarea { resize: vertical; }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
 input:user-invalid { border-color: var(--bad); }
 button, .btn { font: inherit; font-size: .88rem; border: 1px solid var(--line); background: #fff; color: var(--navy); padding: 7px 12px; border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+a.btn { text-decoration: none; }
 button:hover, .btn:hover { border-color: var(--navy-2); }
 button:disabled { opacity: .5; cursor: default; }
 button:focus-visible, .btn:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
