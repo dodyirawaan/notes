@@ -10,6 +10,7 @@ import './venues.js';
 import './study.js';
 import './lit.js';
 import './log.js';
+import './drive.js';
 
 // ---------- Tabs ----------
 const tabs = [...document.querySelectorAll('[role=tab]')];

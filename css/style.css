@@ -236,3 +236,7 @@ dialog h3 { margin: 0; }
   .sticky-bar { position: static; }
 }
 @media print { nav.tabs, header.top, .foot { display: none; } }
+.error-text { color: var(--bad) !important; }
+.steps { padding-left: 20px; font-size: .9rem; }
+.steps li { margin-bottom: 6px; }
+code { background: var(--soft); padding: 0 4px; border-radius: 4px; font-size: .85em; overflow-wrap: anywhere; }

@@ -49,8 +49,15 @@ export async function openVault(key) {
 
 export const load = (key, fallback) => structuredClone(key in cache ? cache[key] : fallback);
 
+// UI preferences and sync bookkeeping do not count as changes worth syncing.
+const UNTRACKED = /^(drive|notified|notifAsked|meta\.|calc\.|planner\.view|tasks\.sort|lit\.view)/;
+
 export function save(key, value) {
   cache[key] = structuredClone(value);
+  if (!UNTRACKED.test(key)) {
+    cache['meta.changedAt'] = Date.now();
+    document.dispatchEvent(new Event('datachanged'));
+  }
   persist();
   return true;
 }

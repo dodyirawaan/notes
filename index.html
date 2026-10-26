@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="css/style.css">
 <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-<script type="module" src="js/lock.js?v=4"></script>
+<script type="module" src="js/lock.js?v=5"></script>
 </head>
 <body class="locked">
 <div id="lock" class="lock">
@@ -26,7 +26,7 @@
 </div>
 <header class="top">
   <div class="brand"><span class="logo" aria-hidden="true">▲</span><div><strong>Research Desk</strong><small>Private · encrypted in this browser</small></div></div>
-  <div class="toolbar"><button type="button" id="backup" class="ghost">Export all (JSON)</button><button type="button" id="restore" class="ghost">Import</button><button type="button" id="lock-now" class="ghost">Lock</button></div>
+  <div class="toolbar"><button type="button" id="backup" class="ghost">Export all (JSON)</button><button type="button" id="restore" class="ghost">Import</button><button type="button" id="gd-quick" class="ghost">Sync Drive</button><button type="button" id="lock-now" class="ghost">Lock</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Sections">
@@ -44,6 +44,7 @@
   <button role="tab" data-tab="rockburst">Rockburst</button>
   <button role="tab" data-tab="infrared">Infrared</button>
   <button role="tab" data-tab="profile">Profile</button>
+  <button role="tab" data-tab="sync">Sync</button>
 </nav>
 
 <main>
@@ -75,6 +76,32 @@
       <label class="span2">Research interests<textarea name="interests" rows="2" placeholder="Separate with semicolons, e.g. backfill mining; numerical modelling"></textarea></label>
       <div class="toolbar span2"><button class="primary">Save profile</button><span class="status" id="profile-status" role="status"></span></div>
     </form>
+  </div>
+</section>
+
+<!-- Google Drive sync -->
+<section id="tab-sync" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Google Drive sync</h2>
+    <p class="muted">Data is encrypted on this device with your login before it is uploaded, so Google stores only an unreadable file (<code>research-desk-vault.json</code>). On another device: open this site, sign in with the same email and password, paste the same Client ID and click “Sync now”. Needs a connection that can reach Google (VPN in mainland China).</p>
+    <label>OAuth Client ID<input id="gd-client" placeholder="1234567890-abc.apps.googleusercontent.com" autocomplete="off" spellcheck="false"></label>
+    <div class="toolbar" style="margin-top:12px">
+      <button type="button" class="primary" id="gd-sync">Sync now</button>
+      <button type="button" id="gd-connect">Connect only</button>
+      <button type="button" id="gd-up">Upload (overwrite Drive)</button>
+      <button type="button" id="gd-down">Download (replace this device)</button>
+    </div>
+    <p id="gd-status" class="muted" role="status"></p>
+    <p class="muted small-text">While connected, changes upload automatically about 20 seconds after you stop editing. Google access lasts about an hour, then “Sync now” reconnects.</p>
+    <details class="form-details"><summary>How to get a Client ID (once, about 10 minutes)</summary>
+      <ol class="steps">
+        <li>Open <b>console.cloud.google.com</b> and create a project (any name).</li>
+        <li><b>APIs &amp; Services → Library</b>: enable <b>Google Drive API</b>.</li>
+        <li><b>OAuth consent screen</b>: User type <i>External</i>, fill in app name and your email, keep it in <i>Testing</i>, and add your Google account under <b>Test users</b>.</li>
+        <li><b>Credentials → Create credentials → OAuth client ID</b>: type <i>Web application</i>, Authorized JavaScript origin <code>https://dodyirawaan.github.io</code> (no path, no trailing slash).</li>
+        <li>Copy the Client ID (ends with <code>.apps.googleusercontent.com</code>) and paste it above.</li>
+      </ol>
+    </details>
   </div>
 </section>
 
