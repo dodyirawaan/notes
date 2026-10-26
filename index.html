@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Desk</title>
+<meta name="description" content="Personal research desk: planner, activity report generator, mining calculators, literature tracker and logs. All data stays in your browser.">
+<meta name="theme-color" content="#1f3a5f">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f3a5f'/%3E%3Cpath d='M6 23l7-12 5 8 3-5 5 9z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true">▲</span><div><strong>Research Desk</strong><small>Private · stored only in this browser</small></div></div>
+  <div class="toolbar"><button type="button" id="backup" class="ghost">Export all (JSON)</button><button type="button" id="restore" class="ghost">Import</button></div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Sections">
+  <button role="tab" data-tab="dashboard">Dashboard</button>
+  <button role="tab" data-tab="planner">Planner</button>
+  <button role="tab" data-tab="timetable">Timetable</button>
+  <button role="tab" data-tab="tasks">Tasks</button>
+  <button role="tab" data-tab="report">Report</button>
+  <button role="tab" data-tab="milestones">Milestones</button>
+  <button role="tab" data-tab="venues">Conferences</button>
+  <button role="tab" data-tab="literature">Literature</button>
+  <button role="tab" data-tab="log">Research log</button>
+  <button role="tab" data-tab="study">Study log</button>
+  <button role="tab" data-tab="backfill">Backfill</button>
+  <button role="tab" data-tab="rockburst">Rockburst</button>
+  <button role="tab" data-tab="infrared">Infrared</button>
+  <button role="tab" data-tab="profile">Profile</button>
+</nav>
+
+<main>
+<!-- Dashboard -->
+<section id="tab-dashboard" role="tabpanel" hidden>
+  <div class="hero"><div><h1 id="db-hello">Welcome.</h1><p class="muted" id="db-date"></p></div>
+    <div class="counter"><span id="db-count">0</span><div><span id="db-count-label">activities logged</span><button type="button" class="primary small" id="db-open-report">Open Report Generator</button></div></div></div>
+  <div class="card"><div class="card-head"><h2>This week</h2><button type="button" class="small" data-goto="planner">Open planner</button></div><div class="db-week" id="db-week"></div></div>
+  <div class="two">
+    <div class="card"><div class="card-head"><h2>Deadlines · next 14 days</h2></div><ul class="plain" id="db-deadlines"></ul></div>
+    <div class="card"><div class="card-head"><h2>Open tasks</h2><button type="button" class="small" data-goto="tasks">Open tasks</button></div><div class="db-tasks" id="db-tasks"></div></div>
+  </div>
+</section>
+
+<!-- Profile -->
+<section id="tab-profile" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Profile</h2>
+    <p class="muted">Stored only in this browser. Used on the report cover, footer and signature block.</p>
+    <form id="profile-form" class="grid">
+      <label>Full name<input name="name" required autocomplete="name"></label>
+      <label>Chinese name<input name="cnName" lang="zh"></label>
+      <label>Nationality<input name="nationality"></label>
+      <label>Student ID<input name="studentId"></label>
+      <label>Programme<input name="programme" placeholder="e.g. Master of Engineering, Mining Engineering"></label>
+      <label>University<input name="university"></label>
+      <label>Scholarship<input name="scholarship"></label>
+      <label>Supervisor<input name="supervisor" placeholder="e.g. Prof. …"></label>
+      <label class="span2">Research interests<textarea name="interests" rows="2" placeholder="Separate with semicolons, e.g. backfill mining; numerical modelling"></textarea></label>
+      <div class="toolbar span2"><button class="primary">Save profile</button><span class="status" id="profile-status" role="status"></span></div>
+    </form>
+  </div>
+</section>
+
+<!-- Report -->
+<section id="tab-report" role="tabpanel" hidden>
+  <div class="card">
+    <div class="card-head"><h2>Report Generator</h2><span class="muted" id="rp-count"></span></div>
+    <div class="grid">
+      <label class="span2">Report title<input id="rp-title"></label>
+      <label>From date (report start)<input type="date" id="rp-from"></label>
+      <label>To date (optional)<input type="date" id="rp-to"></label>
+      <div class="field span2"><div class="field-head"><span>Summary</span><button type="button" class="small" id="rp-draft-summary">Auto-draft</button></div><textarea id="rp-summary" rows="4" aria-label="Summary"></textarea></div>
+      <div class="field span2"><div class="field-head"><span>Overall reflection</span><button type="button" class="small" id="rp-draft-reflection">Auto-draft</button></div><textarea id="rp-reflection" rows="4" aria-label="Overall reflection"></textarea></div>
+    </div>
+    <div class="toolbar sticky-bar">
+      <button type="button" class="primary" id="rp-add">+ Add activity</button>
+      <button type="button" id="rp-sort">Sort by date</button>
+      <button type="button" id="rp-save">Save draft (JSON)</button>
+      <button type="button" id="rp-load">Load draft</button>
+      <button type="button" class="accent" id="rp-pdf">Generate PDF</button>
+    </div>
+    <p class="muted small-text">Empty objectives, outcomes, summary and reflection are auto-drafted in the PDF. Activities outside the period are skipped.</p>
+  </div>
+  <div id="act-list"></div>
+</section>
+
+<!-- Planner -->
+<section id="tab-planner" role="tabpanel" hidden>
+  <div class="card">
+    <div class="cal-bar">
+      <div class="toolbar"><button type="button" id="pl-prev" aria-label="Previous">‹</button><button type="button" id="pl-today">Today</button><button type="button" id="pl-next" aria-label="Next">›</button><h2 id="pl-title"></h2></div>
+      <div class="toolbar"><div class="seg"><button type="button" id="pl-month">Month</button><button type="button" id="pl-week">Week</button></div>
+        <button type="button" class="primary" id="pl-add">+ Event</button><button type="button" id="pl-ics">Export .ics</button><button type="button" id="pl-notify">Enable reminders</button></div>
+    </div>
+    <div class="legend-row" id="pl-legend"></div>
+    <div id="pl-cal" class="cal"></div>
+    <p class="muted small-text">Click a day to add an event. Classes come from the Timetable tab and deadlines from the Conferences tab. Reminders pop up only while this page is open; import the .ics file into your phone calendar for alarms on the go.</p>
+  </div>
+  <dialog id="ev-dialog">
+    <form id="ev-form" class="grid">
+      <h3 id="ev-heading" class="span2">New event</h3>
+      <input type="hidden" name="id">
+      <label class="span2">Title<input name="title" required maxlength="200"></label>
+      <label>Type<select name="type"></select></label>
+      <label>Date<input type="date" name="date" required></label>
+      <label>Start<input type="time" name="start"></label>
+      <label>End<input type="time" name="end"></label>
+      <label>Venue<input name="venue"></label>
+      <label>Organizer<input name="organizer"></label>
+      <label>Repeat<select name="repeat"><option value="none">None</option><option value="weekly">Weekly</option></select></label>
+      <label id="ev-until-wrap">Repeat until<input type="date" name="until"></label>
+      <label>Reminder (minutes before)<input type="number" name="reminder" min="0" step="5" placeholder="none"></label>
+      <label class="span2">Notes<textarea name="notes" rows="3"></textarea></label>
+      <div class="toolbar span2 dlg-actions">
+        <button class="primary">Save</button>
+        <button type="button" id="ev-report" class="accent">Add to report</button>
+        <button type="button" id="ev-cancel">Cancel</button>
+        <button type="button" id="ev-delete" class="danger">Delete</button>
+      </div>
+    </form>
+  </dialog>
+</section>
+
+<!-- Timetable -->
+<section id="tab-timetable" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Weekly class timetable</h2>
+    <p class="muted">Classes repeat weekly in the calendar between the term dates.</p>
+    <div class="grid">
+      <label>Term start<input type="date" id="tt-start"></label>
+      <label>Term end<input type="date" id="tt-end"></label>
+    </div>
+    <form id="tt-form" class="grid form-box">
+      <input type="hidden" name="id">
+      <label class="span2">Course<input name="course" required></label>
+      <label>Day<select name="day"></select></label>
+      <label>Room<input name="room"></label>
+      <label>Start<input type="time" name="start" required></label>
+      <label>End<input type="time" name="end" required></label>
+      <label>Teacher<input name="teacher"></label>
+      <label>Reminder (minutes before)<input type="number" name="reminder" min="0" step="5" placeholder="none"></label>
+      <div class="toolbar span2"><button class="primary">Save class</button><button type="button" id="tt-cancel">Clear</button></div>
+    </form>
+  </div>
+  <div class="tt-grid" id="tt-grid"></div>
+</section>
+
+<!-- Tasks -->
+<section id="tab-tasks" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Tasks</h2>
+    <form id="tk-form" class="grid four">
+      <input type="hidden" name="id">
+      <label class="span2">Task<input name="title" required></label>
+      <label>Priority<select name="priority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></label>
+      <label>Due date<input type="date" name="due"></label>
+      <label>Tag<select name="tag"><option>thesis</option><option>course</option><option>paper</option><option>admin</option></select></label>
+      <label>Status<select name="status"><option value="todo">To do</option><option value="doing">Doing</option><option value="done">Done</option></select></label>
+      <div class="toolbar span2 end-self"><button class="primary">Save task</button><button type="button" id="tk-cancel">Clear</button></div>
+    </form>
+    <div class="toolbar"><label class="inline">Sort by <select id="tk-sort"><option value="due">Due date</option><option value="priority">Priority</option></select></label></div>
+  </div>
+  <div class="board" id="tk-board"></div>
+</section>
+
+<!-- Milestones -->
+<section id="tab-milestones" role="tabpanel" hidden>
+  <div class="card">
+    <div class="card-head"><h2>Academic milestones</h2><div class="toolbar"><button type="button" class="small" id="ms-sort">Sort by date</button><button type="button" class="small" id="ms-template">Load template</button><button type="button" class="small primary" id="ms-add">+ Milestone</button></div></div>
+    <div class="table-wrap"><table class="data edit-table"><thead><tr><th>Milestone</th><th>Start</th><th>Due</th><th>Status</th><th>Progress %</th><th></th></tr></thead><tbody id="ms-body"></tbody></table></div>
+  </div>
+  <div class="card"><h2>Timeline</h2><div class="gantt" id="ms-gantt"></div></div>
+  <div class="card">
+    <div class="card-head"><h2>Document expiries</h2><button type="button" class="small primary" id="doc-add">+ Document</button></div>
+    <div class="table-wrap"><table class="data edit-table"><thead><tr><th>Document</th><th>Expiry</th><th>Days left</th><th>Notes</th><th></th></tr></thead><tbody id="doc-body"></tbody></table></div>
+  </div>
+</section>
+
+<!-- Conferences & journals -->
+<section id="tab-venues" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Conferences &amp; journals</h2>
+    <p class="muted">Deadlines are added to the calendar automatically (with a one-day reminder).</p>
+    <form id="vn-form" class="grid">
+      <input type="hidden" name="id">
+      <label>Name<input name="name" required></label>
+      <label>Kind<select name="kind"><option>conference</option><option>journal</option></select></label>
+      <label class="span2">URL<input type="url" name="url" placeholder="https://"></label>
+      <label>Abstract deadline<input type="date" name="abstractDeadline"></label>
+      <label>Full-paper deadline<input type="date" name="paperDeadline"></label>
+      <label>Status<select name="status"><option>considering</option><option>preparing</option><option>abstract submitted</option><option>paper submitted</option><option>under review</option><option>accepted</option><option>rejected</option><option>published</option></select></label>
+      <label>Notes<input name="notes"></label>
+      <div class="toolbar span2"><button class="primary">Save</button><button type="button" id="vn-cancel">Clear</button></div>
+    </form>
+  </div>
+  <div class="card table-wrap"><table class="data"><thead><tr><th>Name</th><th>Abstract</th><th>Full paper</th><th>Status</th><th></th></tr></thead><tbody id="vn-body"></tbody></table></div>
+</section>
+
+<!-- Literature -->
+<section id="tab-literature" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Literature tracker</h2>
+    <details id="lt-form-box" class="form-details"><summary>Add / edit paper</summary>
+      <form id="lt-form" class="grid">
+        <input type="hidden" name="id">
+        <label class="span2">Title<input name="title" required></label>
+        <label class="span2">Authors<input name="authors" placeholder="Surname, Given; Surname, Given"></label>
+        <label>Year<input name="year" inputmode="numeric" maxlength="4"></label>
+        <label>Journal / venue<input name="journal"></label>
+        <label>DOI<input name="doi" placeholder="10.xxxx/…"></label>
+        <label>Status<select name="status"></select></label>
+        <label class="span2">Tags (comma-separated)<input name="tags" placeholder="backfill, strainburst"></label>
+        <label>Method<textarea name="method" rows="2"></textarea></label>
+        <label>Data<textarea name="data" rows="2"></textarea></label>
+        <label>Findings<textarea name="findings" rows="2"></textarea></label>
+        <label>Gaps<textarea name="gaps" rows="2"></textarea></label>
+        <label class="span2">Notes<textarea name="notes" rows="2"></textarea></label>
+        <div class="toolbar span2"><button class="primary">Save paper</button><button type="button" id="lt-cancel">Clear</button></div>
+      </form>
+    </details>
+    <div class="toolbar filters">
+      <input type="search" id="lt-q" placeholder="Search…" aria-label="Search papers">
+      <select id="lt-status" aria-label="Status filter"></select>
+      <select id="lt-tag" aria-label="Tag filter"></select>
+      <div class="seg"><button type="button" id="lt-list">List</button><button type="button" id="lt-matrix">Matrix</button></div>
+      <button type="button" id="lt-bib">BibTeX</button><button type="button" id="lt-csv">CSV</button>
+      <span class="muted small-text" id="lt-count"></span>
+    </div>
+    <div class="table-wrap"><table class="data" id="lt-table"></table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Review-paper outline</h2><div class="toolbar"><button type="button" class="small" id="ol-reset">Reset</button><button type="button" class="small" id="ol-add">+ Section</button><button type="button" class="small primary" id="ol-md">Export Markdown</button></div></div>
+    <label>Outline title<input id="ol-title"></label>
+    <p class="muted small-text">Give a section a tag to list papers with that tag under it in the Markdown export.</p>
+    <ol class="ol-list" id="ol-list"></ol>
+  </div>
+</section>
+
+<!-- Research log -->
+<section id="tab-log" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Research log</h2>
+    <form id="lg-form" class="grid">
+      <input type="hidden" name="id">
+      <label>Date<input type="date" name="date" required></label>
+      <label>Tags<input name="tags" placeholder="experiment, FLAC3D"></label>
+      <label class="span2">Entry<textarea name="text" rows="4" required></textarea></label>
+      <div class="toolbar span2"><button class="primary">Save entry</button></div>
+    </form>
+    <div class="toolbar filters"><input type="search" id="lg-q" placeholder="Search entries…" aria-label="Search entries"><button type="button" id="lg-md">Export Markdown</button></div>
+  </div>
+  <div id="lg-list"></div>
+</section>
+
+<!-- Study log -->
+<section id="tab-study" role="tabpanel" hidden>
+  <div class="card">
+    <div class="card-head"><h2>Study log</h2><span class="muted" id="st-week"></span></div>
+    <form id="st-form" class="grid four">
+      <label>Date<input type="date" name="date" required></label>
+      <label>Hours<input type="number" name="hours" min="0.25" max="24" step="0.25" required></label>
+      <label>Topic<input name="topic" required></label>
+      <label>Tag<select name="tag"><option>thesis</option><option>course</option><option>paper</option><option>language</option><option>other</option></select></label>
+      <div class="toolbar span2"><button class="primary">Log session</button></div>
+    </form>
+    <h3>Weekly totals</h3>
+    <canvas id="st-chart" class="chart" role="img" aria-label="Bar chart of study hours per week"></canvas>
+  </div>
+  <div class="card table-wrap"><table class="data"><thead><tr><th>Date</th><th>Hours</th><th>Topic</th><th>Tag</th><th></th></tr></thead><tbody id="st-body"></tbody></table></div>
+</section>
+
+<!-- Backfill -->
+<section id="tab-backfill" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Backfill mix calculator</h2>
+    <form id="bf-form" class="grid">
+      <label>Solids mass fraction C<sub>w</sub> (%)<input name="solidsPct" type="number" step="any" value="72" required></label>
+      <label>Cement : tailings = 1 : N &nbsp;(N)<input name="tailingsPerCement" type="number" step="any" value="8" required></label>
+      <label>Cement density ρ<sub>c</sub> (kg/m³)<input name="rhoCement" type="number" step="any" value="3100" required></label>
+      <label>Tailings density ρ<sub>t</sub> (kg/m³)<input name="rhoTailings" type="number" step="any" value="2700" required></label>
+      <label>Water density ρ<sub>w</sub> (kg/m³)<input name="rhoWater" type="number" step="any" value="1000" required></label>
+    </form>
+    <div class="out" id="bf-out" aria-live="polite"></div>
+    <div class="formula">ρ<sub>s</sub> = M<sub>s</sub> / (M<sub>c</sub>/ρ<sub>c</sub> + M<sub>t</sub>/ρ<sub>t</sub>) &nbsp;·&nbsp; ρ = (M<sub>s</sub>+M<sub>w</sub>) / (M<sub>s</sub>/ρ<sub>s</sub> + M<sub>w</sub>/ρ<sub>w</sub>) &nbsp;·&nbsp; C<sub>w</sub> = M<sub>s</sub>/(M<sub>s</sub>+M<sub>w</sub>) &nbsp;·&nbsp; w/c = M<sub>w</sub>/M<sub>c</sub> &nbsp;·&nbsp; cement per m³ = ρ·M<sub>c</sub>/(M<sub>s</sub>+M<sub>w</sub>)</div>
+  </div>
+</section>
+
+<!-- Rockburst -->
+<section id="tab-rockburst" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Rockburst / strainburst screening</h2>
+    <form id="rb-form" class="grid">
+      <label>σ<sub>c</sub> — uniaxial compressive strength (MPa)<input name="sc" type="number" step="any" min="0" value="120" required></label>
+      <label>σ<sub>t</sub> — tensile strength (MPa)<input name="st" type="number" step="any" min="0" value="8" required></label>
+      <label>σ<sub>θ</sub> — max. tangential stress (MPa)<input name="stheta" type="number" step="any" min="0" value="45"></label>
+      <span></span>
+      <label>Φ<sub>sp</sub> — retained elastic strain energy<input name="phisp" type="number" step="any" min="0" value="4.2"></label>
+      <label>Φ<sub>st</sub> — dissipated strain energy<input name="phist" type="number" step="any" min="0" value="1"></label>
+    </form>
+    <div class="out" id="rb-out" aria-live="polite"></div>
+    <div class="formula">B<sub>1</sub> = σ<sub>c</sub>/σ<sub>t</sub> &nbsp;·&nbsp; B<sub>2</sub> = (σ<sub>c</sub>−σ<sub>t</sub>)/(σ<sub>c</sub>+σ<sub>t</sub>) &nbsp;·&nbsp; W<sub>et</sub> = Φ<sub>sp</sub>/Φ<sub>st</sub></div>
+    <table class="data classes"><thead><tr><th>Class</th><th>σ<sub>θ</sub>/σ<sub>c</sub> (Russenes)</th><th>W<sub>et</sub></th></tr></thead>
+      <tbody><tr><td><span class="badge lv-0">No rockburst</span></td><td>&lt; 0.20</td><td>&lt; 2.0</td></tr><tr><td><span class="badge lv-1">Weak</span></td><td>0.20 – 0.30</td><td>2.0 – 3.5</td></tr><tr><td><span class="badge lv-2">Moderate</span></td><td>0.30 – 0.55</td><td>3.5 – 5.0</td></tr><tr><td><span class="badge lv-3">Strong</span></td><td>&gt; 0.55</td><td>&gt; 5.0</td></tr></tbody></table>
+    <p class="note">Screening aid only, verify against your references.</p>
+  </div>
+</section>
+
+<!-- Infrared -->
+<section id="tab-infrared" role="tabpanel" hidden>
+  <div class="card">
+    <h2>Infrared emissivity correction</h2>
+    <form id="ir-form" class="grid">
+      <label>Apparent temperature T<sub>app</sub> (°C)<input name="tAppC" type="number" step="any" value="35" required></label>
+      <label>Reflected temperature T<sub>refl</sub> (°C)<input name="tReflC" type="number" step="any" value="22" required></label>
+      <label>Emissivity ε (0–1]<input name="eps" type="number" step="any" min="0" max="1" value="0.93" required></label>
+    </form>
+    <div class="out" id="ir-out" aria-live="polite"></div>
+    <div class="formula">T<sub>obj</sub> = [ (T<sub>app</sub><sup>4</sup> − (1−ε)·T<sub>refl</sub><sup>4</sup>) / ε ]<sup>1/4</sup> &nbsp; (temperatures in K; K = °C + 273.15)</div>
+    <p class="muted small-text">Assumes a broadband (total-radiation) model with negligible atmospheric attenuation.</p>
+  </div>
+</section>
+</main>
+<footer class="foot">Research Desk · works offline · your data never leaves this browser</footer>
+</body>
+</html>

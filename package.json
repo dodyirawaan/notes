@@ -1,0 +1,6 @@
+{
+  "name": "research-desk",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node test/calc.test.mjs" }
+}
