@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="css/style.css">
 <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-<script type="module" src="js/lock.js?v=11"></script>
+<script type="module" src="js/lock.js?v=12"></script>
 </head>
 <body class="locked">
 <div id="lock" class="lock">
@@ -131,7 +131,13 @@
       <button type="button" id="rp-save">Save draft (JSON)</button>
       <button type="button" id="rp-load">Load draft</button>
       <button type="button" class="accent" id="rp-pdf">Generate PDF</button>
+      <button type="button" class="danger" id="rp-reset" hidden>Reset to seed</button>
     </div>
+    <details class="form-details"><summary>Import activities seed (JSON)</summary>
+      <p class="muted small-text">Paste or load the seed JSON (<code>summary</code>, <code>reflection</code>, <code>activities</code> with <code>photoSlots</code>). It is stored only in this browser’s encrypted data and is what “Reset to seed” restores.</p>
+      <textarea id="rp-json" rows="6" spellcheck="false" autocomplete="off"></textarea>
+      <div class="toolbar" style="margin-top:8px"><button type="button" class="primary small" id="rp-import">Import</button><button type="button" class="small" id="rp-import-file">Load file…</button></div>
+    </details>
     <p class="muted small-text">Empty objectives, outcomes, summary and reflection are auto-drafted in the PDF. Activities outside the period are skipped.</p>
   </div>
   <div id="act-list"></div>

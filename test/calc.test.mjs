@@ -1,6 +1,7 @@
 // Smoke test: node test/calc.test.mjs
 import assert from 'node:assert/strict';
 import * as C from '../js/calc.js';
+import { normalizeReportSeed } from '../js/seed-activities.js';
 
 const near = (a, b, tol = 1e-6) => assert.ok(Math.abs(a - b) <= tol, `${a} ≉ ${b}`);
 
@@ -81,6 +82,20 @@ assert.throws(() => C.parseWeeks('5-2'), RangeError);
 assert.throws(() => C.parseSlots('Xyz 1-2'), RangeError);
 assert.throws(() => C.normalizeTimetable({ semesterStart: '2026-09-07', courses: [{ name: 'X', weeks: '1-2', slots: [] }] }), RangeError);
 assert.throws(() => C.normalizeTimetable({ courses: [] }), RangeError);
+
+// Report seed import (made-up data; the real seed lives only in the encrypted vault)
+let n = 0;
+const rs = normalizeReportSeed({ summary: 'S', reflection: 'R', activities: [
+  { title: 'Seminar X', shortTitle: 'X', type: 'seminar', date: '2026-09-11', time: '4:30 PM', objectives: ['A.', '- B.'], description: ['P1', 'P2'], outcomes: ['O'], photoSlots: ['Cap 1', 'Cap 2'] },
+  { title: 'Festival Y', date: '2026-10-25', objectives: [], description: 'One paragraph', outcomes: [], photoSlots: [] },
+] }, () => `id${++n}`);
+assert.equal(rs.summary, 'S');
+assert.equal(rs.activities[0].objectives, '- A.\n- B.');
+assert.equal(rs.activities[0].description, 'P1\n\nP2');
+assert.deepEqual(rs.activities[0].photos, [{ id: 'id2', caption: 'Cap 1' }, { id: 'id3', caption: 'Cap 2' }]);
+assert.equal(rs.activities[1].role, 'Participant');
+assert.equal(rs.activities[1].description, 'One paragraph');
+assert.throws(() => normalizeReportSeed({ activities: [{ title: 'No date' }] }, () => 'x'), RangeError);
 
 // ICS
 const ics = C.buildICS([

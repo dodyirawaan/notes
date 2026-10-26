@@ -1,5 +1,6 @@
 // Report Generator: activities with photos, rule-based drafting, A4 PDF via jsPDF + autoTable.
 import { load, save, uid, esc, download, readFile, debounce, photoPut, photoDel, photoEntries, fmtDate, today, onTab } from './store.js';
+import { normalizeReportSeed } from './seed-activities.js';
 
 const EMPTY = { title: 'Activity Report', from: '', to: '', summary: '', reflection: '', activities: [] };
 let state = { ...EMPTY, ...load('report', EMPTY) };
@@ -9,8 +10,10 @@ const persist = debounce(() => save('report', state), 300);
 const $ = id => document.getElementById(id);
 const list = $('act-list');
 
+// An activity's `photos` are ordered slots { id, caption, w?, h? }; a slot is empty until an image is stored under its id.
 const FIELDS = [
-  ['title', 'Title', 'text'], ['date', 'Date', 'date'], ['venue', 'Venue', 'text'], ['organizer', 'Organizer', 'text'],
+  ['title', 'Title', 'text'], ['shortTitle', 'Short title (table)', 'text'], ['date', 'Date', 'date'], ['time', 'Time', 'text'],
+  ['venue', 'Venue', 'text'], ['organizer', 'Organizer', 'text'], ['institutions', 'Institutions', 'text'],
   ['participants', 'Participants', 'text'], ['role', 'Role', 'text'],
   ['objectives', 'Objectives', 'area'], ['description', 'Description', 'area'], ['outcomes', 'Outcomes', 'area'],
 ];
@@ -39,7 +42,8 @@ const TOPICS = [
   [/numerical|flac|pfc|udec|3dec|abaqus|simulation|model/i, 'numerical modelling'],
   [/autonomous|closed-loop|control|automation/i, 'closed-loop control of support equipment'],
 ];
-const kindOf = a => (KINDS.find(([, re]) => re.test(`${a.title} ${a.description}`)) || ['general'])[0];
+const TYPE_KIND = { conference: 'conference', seminar: 'seminar', workshop: 'workshop', training: 'workshop', safety: 'workshop', field: 'field', lab: 'lab', presentation: 'presentation', meeting: 'meeting', culture: 'cultural', cultural: 'cultural' };
+const kindOf = a => TYPE_KIND[a.type] || (KINDS.find(([, re]) => re.test(`${a.title} ${a.description}`)) || ['general'])[0];
 const topicsOf = text => TOPICS.filter(([re]) => re.test(text)).map(([, t]) => t);
 const joinList = xs => xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`;
 function interests() {
@@ -120,12 +124,19 @@ function cardHtml(a, i) {
     ? `<div class="field span2"><div class="field-head"><span>${label}</span>${f !== 'description' ? `<button type="button" class="small" data-act="draft-${f}">Auto-draft</button>` : ''}</div>
        <textarea data-f="${f}" rows="${f === 'description' ? 5 : 3}" aria-label="${label}" placeholder="${f === 'description' ? 'What happened, what you did' : 'One point per line, start with -'}">${esc(a[f])}</textarea></div>`
     : `<label>${label}<input type="${type}" data-f="${f}" value="${esc(a[f])}"${f === 'title' || f === 'date' ? ' required' : ''}></label>`).join('');
-  const ph = a.photos.map(p => `<figure data-pid="${p.id}"><img src="${photos.get(p.id) || ''}" alt="${esc(p.caption)}"><input data-cap placeholder="Caption" value="${esc(p.caption)}" aria-label="Caption"><button type="button" class="small danger" data-act="photo-del">Remove</button></figure>`).join('');
+  const ph = a.photos.map(p => {
+    const src = photos.get(p.id);
+    return `<figure data-pid="${p.id}"${src ? '' : ' class="empty"'}>
+      <label class="tile" title="${src ? 'Replace photo' : 'Add photo'}">${src ? `<img src="${src}" alt="${esc(p.caption)}">` : '<span class="tile-add"><b>+</b>Add photo</span>'}<input type="file" accept="image/*" hidden data-slot-input></label>
+      <textarea data-cap rows="3" placeholder="Caption" aria-label="Caption">${esc(p.caption)}</textarea>
+      <span class="row-actions">${src ? '<button type="button" class="small" data-act="photo-clear">Remove photo</button>' : ''}<button type="button" class="small danger" data-act="slot-del">Delete slot</button></span></figure>`;
+  }).join('');
+  const filled = a.photos.filter(p => photos.has(p.id)).length;
   return `<details class="act${isIn(a) ? '' : ' excluded'}" data-id="${a.id}"${open.has(a.id) ? ' open' : ''}>
     <summary>${summaryHtml(a, i)}</summary>
     <div class="grid">${fields}</div>
-    <div class="photos"><div class="field-head"><strong>Photos</strong>
-      <label class="btn small">Add photos<input type="file" accept="image/*" multiple hidden data-photo-input></label></div>
+    <div class="photos"><div class="field-head"><strong>Photos <span class="muted small-text">${filled}/${a.photos.length} filled · empty slots are left out of the PDF</span></strong>
+      <span class="row-actions"><button type="button" class="small" data-act="slot-add">+ Empty slot</button><label class="btn small">Add photos<input type="file" accept="image/*" multiple hidden data-photo-input></label></span></div>
       <div class="photo-grid">${ph || '<p class="muted">No photos yet. Photos are downscaled and stay in this browser.</p>'}</div></div>
     <div class="toolbar end"><button type="button" class="small" data-act="up">Move up</button><button type="button" class="small" data-act="down">Move down</button><button type="button" class="small danger" data-act="del">Delete activity</button></div>
   </details>`;
@@ -197,11 +208,18 @@ list.addEventListener('click', async e => {
     persist();
     return;
   }
-  if (act === 'photo-del') {
-    const pid = btn.closest('figure').dataset.pid;
-    a.photos = a.photos.filter(p => p.id !== pid);
+  const pid = btn.closest('figure')?.dataset.pid, slot = a.photos.find(p => p.id === pid);
+  if (act === 'photo-clear') {
+    delete slot.w; delete slot.h;
     photos.delete(pid);
     await photoDel(pid);
+  } else if (act === 'slot-del') {
+    if (photos.has(pid) && !confirm('Delete this slot and its photo?')) return;
+    a.photos = a.photos.filter(p => p !== slot);
+    photos.delete(pid);
+    await photoDel(pid);
+  } else if (act === 'slot-add') {
+    a.photos.push({ id: uid(), caption: '' });
   } else if (act === 'del') {
     if (!confirm(`Delete “${a.title || 'Untitled activity'}” and its photos?`)) return;
     state.activities.splice(i, 1);
@@ -236,6 +254,21 @@ async function downscale(file, max = 1280) {
 }
 
 list.addEventListener('change', async e => {
+  if ('slotInput' in e.target.dataset) { // fill (or replace) one slot, keeping its caption and place
+    const file = e.target.files[0];
+    if (!file) return;
+    const a = find(e.target.closest('.act').dataset.id), slot = a.photos.find(p => p.id === e.target.closest('figure').dataset.pid);
+    try {
+      if (!file.type.startsWith('image/')) throw new Error(`“${file.name}” is not an image`);
+      const { data, w, h } = await downscale(file);
+      await photoPut(slot.id, data);
+      photos.set(slot.id, data);
+      Object.assign(slot, { w, h });
+      save('report', state);
+      render();
+    } catch (err) { alert(err.message); }
+    return;
+  }
   if (!('photoInput' in e.target.dataset)) return;
   const a = find(e.target.closest('.act').dataset.id);
   const errors = [];
@@ -253,6 +286,34 @@ list.addEventListener('change', async e => {
   render();
   if (errors.length) alert(errors.join('\n'));
 });
+
+// ---------- Seed (real activities live only in the encrypted vault) ----------
+const seed = () => load('report.seed', null);
+const showSeed = () => { $('rp-reset').hidden = !seed(); };
+async function applySeed(sd) {
+  for (const a of state.activities) for (const p of a.photos) { photos.delete(p.id); await photoDel(p.id).catch(() => {}); }
+  const fresh = normalizeReportSeed(sd, uid);
+  state = { ...state, summary: fresh.summary, reflection: fresh.reflection, activities: fresh.activities };
+  open.clear();
+  save('report', state);
+  for (const k of ['summary', 'reflection']) $('rp-' + k).value = state[k];
+  render();
+}
+async function importSeed(text) {
+  let sd;
+  try { sd = JSON.parse(text); normalizeReportSeed(sd, uid); } catch (e) { return alert(`Import failed: ${e instanceof SyntaxError ? 'not valid JSON' : e.message}`); }
+  if (state.activities.length && !confirm(`Replace the current ${state.activities.length} activities (and their photos), summary and reflection with the ${sd.activities.length} imported activities?`)) return;
+  save('report.seed', sd);
+  await applySeed(sd);
+  showSeed();
+  $('rp-json').value = '';
+}
+$('rp-import').onclick = () => importSeed($('rp-json').value);
+$('rp-import-file').onclick = () => readFile().then(importSeed, () => {});
+$('rp-reset').onclick = () => { if (confirm('Reset all activities, the summary and the reflection to the seed? Current photos are removed.')) applySeed(seed()); };
+// First run on a device that already has the seed (e.g. after a Drive sync) but no report yet.
+if (!load('report', null) && seed()) applySeed(seed());
+showSeed();
 
 // ---------- Draft JSON ----------
 $('rp-save').onclick = () => {
@@ -379,7 +440,7 @@ function makePdf() {
   doc.autoTable({
     ...tableBase, startY: y, theme: 'striped',
     head: [['No.', 'Date', 'Activity', 'Venue', 'Role']],
-    body: acts.map((a, i) => [String(i + 1), fmtDate(a.date, true), clean(a.title), clean(a.venue || '-'), clean(a.role || '-')]),
+    body: acts.map((a, i) => [String(i + 1), fmtDate(a.date, true), clean(a.shortTitle || a.title), clean(a.venue || '-'), clean(a.role || '-')]),
     headStyles: { fillColor: NAVY, textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [246, 248, 252] },
     columnStyles: { 0: { cellWidth: 11, halign: 'center' }, 1: { cellWidth: 26 } },
@@ -401,7 +462,8 @@ function makePdf() {
     y += bh + 4;
     doc.autoTable({
       ...tableBase, startY: y, theme: 'grid',
-      body: [['Date', fmtDate(a.date)], ['Venue', a.venue], ['Organizer', a.organizer], ['Participants', a.participants], ['Role', a.role]].map(([k, v]) => [k, clean(v || '-')]),
+      body: [['Date', [fmtDate(a.date), a.time].filter(Boolean).join(', ')], ['Venue', a.venue], ['Organizer', a.organizer], ['Institutions', a.institutions], ['Participants', a.participants], ['Role', a.role]]
+        .filter(([k, v]) => v || k !== 'Institutions').map(([k, v]) => [k, clean(v || '-')]),
       columnStyles: { 0: { fontStyle: 'bold', fillColor: SOFT, textColor: NAVY, cellWidth: 40 } },
     });
     y = doc.lastAutoTable.finalY + 7;
@@ -409,18 +471,22 @@ function makePdf() {
     heading('Description', 11.5); para(a.description);
     const ph = a.photos.filter(x => photos.has(x.id));
     if (ph.length) {
-      heading('Documentation', 11.5);
       const gap = 6, cw = (CW - gap) / 2, maxH = 68;
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(9);
+      const rows = [];
       for (let k = 0; k < ph.length; k += 2) {
         const pair = ph.slice(k, k + 2).map(x => {
           const r = x.w && x.h ? x.h / x.w : 0.75;
           let w = cw, h = cw * r;
           if (h > maxH) { h = maxH; w = h / r; }
-          doc.setFont('helvetica', 'italic'); doc.setFontSize(9);
           return { x, w, h, cap: doc.splitTextToSize(clean(`Figure ${++fig}. ${x.caption || a.title}`), cw) };
         });
         const imgH = Math.max(...pair.map(q => q.h));
-        const rowH = imgH + 3 + Math.max(...pair.map(q => q.cap.length)) * 4 + 4;
+        rows.push({ pair, imgH, rowH: imgH + 3 + Math.max(...pair.map(q => q.cap.length)) * 4 + 4 });
+      }
+      need(9 + rows[0].rowH); // keep the heading with the first row of photos
+      heading('Documentation', 11.5);
+      for (const { pair, imgH, rowH } of rows) {
         need(rowH);
         pair.forEach((q, j) => {
           const x0 = pair.length === 1 ? M + (CW - cw) / 2 : M + j * (cw + gap);

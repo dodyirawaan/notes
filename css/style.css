@@ -171,6 +171,15 @@ details.act > .toolbar { padding-bottom: 14px; }
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
 .photo-grid figure { margin: 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
 .photo-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 5px; background: var(--soft); }
+.photo-grid .tile { display: block; cursor: pointer; border-radius: 6px; overflow: hidden; position: relative; }
+.photo-grid .tile img { display: block; transition: opacity .15s; }
+.photo-grid .tile:hover img { opacity: .85; }
+.tile-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; aspect-ratio: 4 / 3; border: 2px dashed #c6d2e1; border-radius: 6px; background: #f7f9fc; color: var(--navy-2); font-size: .82rem; font-weight: 600; transition: border-color .15s, background-color .15s; }
+.tile-add b { font-size: 1.6rem; line-height: 1; font-weight: 400; }
+.photo-grid .tile:hover .tile-add { border-color: var(--accent); background: #eef5ff; }
+.photo-grid figure.empty { border-style: dashed; }
+.photo-grid textarea[data-cap] { font-size: .8rem; line-height: 1.35; padding: 6px 8px; resize: vertical; }
+.photo-grid figure .row-actions { justify-content: flex-start; }
 
 /* Calendar */
 .cal-bar { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
