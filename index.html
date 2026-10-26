@@ -10,12 +10,24 @@
 <link rel="stylesheet" href="css/style.css">
 <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-<script type="module" src="js/app.js"></script>
+<script type="module" src="js/lock.js"></script>
 </head>
-<body>
+<body class="locked">
+<div id="lock" class="lock">
+  <form id="lock-form" class="lock-card" hidden>
+    <span class="logo" aria-hidden="true">▲</span>
+    <h1>Research Desk</h1>
+    <p class="muted">Private workspace. Sign in to decrypt your data on this device.</p>
+    <label>Email<input type="email" name="email" required autocomplete="username"></label>
+    <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
+    <label class="inline"><input type="checkbox" name="remember" checked> Stay unlocked until this tab is closed</label>
+    <button class="primary">Unlock</button>
+    <p class="lock-msg" id="lock-msg" role="alert"></p>
+  </form>
+</div>
 <header class="top">
-  <div class="brand"><span class="logo" aria-hidden="true">▲</span><div><strong>Research Desk</strong><small>Private · stored only in this browser</small></div></div>
-  <div class="toolbar"><button type="button" id="backup" class="ghost">Export all (JSON)</button><button type="button" id="restore" class="ghost">Import</button></div>
+  <div class="brand"><span class="logo" aria-hidden="true">▲</span><div><strong>Research Desk</strong><small>Private · encrypted in this browser</small></div></div>
+  <div class="toolbar"><button type="button" id="backup" class="ghost">Export all (JSON)</button><button type="button" id="restore" class="ghost">Import</button><button type="button" id="lock-now" class="ghost">Lock</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Sections">

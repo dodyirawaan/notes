@@ -1,4 +1,4 @@
-import { load, save, allData, download, readFile, photoEntries, photoPut, photoClear, today } from './store.js';
+import { load, save, allData, replaceAll, encrypt, decrypt, download, readFile, photoEntries, photoPut, photoClear, today } from './store.js';
 import './dashboard.js';
 import './tools.js';
 import './report.js';
@@ -49,21 +49,25 @@ export function flash(id, msg) {
   el._t = setTimeout(() => (el.textContent = ''), 3000);
 }
 
-// ---------- Full backup / restore ----------
+// ---------- Full backup / restore (backup is encrypted with the login key) ----------
 document.getElementById('backup').addEventListener('click', async () => {
   const photos = Object.fromEntries(await photoEntries());
   const data = allData();
   delete data.notified;
-  download(`research-desk-backup-${today()}.json`, JSON.stringify({ app: 'research-desk', version: 1, exported: new Date().toISOString(), data, photos }));
+  const box = await encrypt(JSON.stringify({ data, photos }));
+  download(`research-desk-backup-${today()}.json`, JSON.stringify({ app: 'research-desk', version: 2, exported: new Date().toISOString(), encrypted: box }));
 });
 
 document.getElementById('restore').addEventListener('click', async () => {
   try {
-    const b = JSON.parse(await readFile());
-    if (b.app !== 'research-desk' || typeof b.data !== 'object') throw new Error('This is not a Research Desk backup file.');
+    let b = JSON.parse(await readFile());
+    if (b.app !== 'research-desk') throw new Error('This is not a Research Desk backup file.');
+    if (b.encrypted) {
+      try { b = JSON.parse(await decrypt(b.encrypted)); } catch { throw new Error('This backup was made with a different login.'); }
+    }
+    if (typeof b.data !== 'object') throw new Error('The backup has no data.');
     if (!confirm('Replace ALL data in this browser with the backup?')) return;
-    for (const k of Object.keys(allData())) localStorage.removeItem('rd.' + k);
-    for (const [k, v] of Object.entries(b.data)) save(k, v);
+    await replaceAll(b.data);
     await photoClear();
     for (const [id, d] of Object.entries(b.photos || {})) if (typeof d === 'string' && d.startsWith('data:image/')) await photoPut(id, d);
     location.reload();

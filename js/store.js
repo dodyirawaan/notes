@@ -1,25 +1,64 @@
-// Browser-only persistence: localStorage for records, IndexedDB for photos (too big for localStorage).
+// Browser-only persistence, encrypted at rest with AES-GCM (key comes from the login, see lock.js).
+// Records live in one encrypted localStorage "vault"; photos are encrypted one by one in IndexedDB.
 const PREFIX = 'rd.';
+const VAULT = PREFIX + 'vault';
+let cache = {};
+let aesKey = null;
 
-export function load(key, fallback) {
-  try {
-    const v = localStorage.getItem(PREFIX + key);
-    return v === null ? structuredClone(fallback) : JSON.parse(v);
-  } catch { return structuredClone(fallback); }
+const te = new TextEncoder(), td = new TextDecoder();
+export function b64e(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+  return btoa(s);
 }
+export const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+export async function encrypt(text) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, te.encode(text)));
+  return { iv: b64e(iv), ct: b64e(ct) };
+}
+export async function decrypt({ iv, ct }) {
+  return td.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(iv) }, aesKey, b64d(ct)));
+}
+
+async function flush() {
+  try { localStorage.setItem(VAULT, JSON.stringify(await encrypt(JSON.stringify(cache)))); }
+  catch (e) { alert(`Could not save (${e.name}). Browser storage may be full or disabled.`); }
+}
+// Coalesces saves: at most one encryption runs at a time and the last state always gets written.
+let writing = null, dirty = false;
+function persist() {
+  dirty = true;
+  writing ||= (async () => { while (dirty) { dirty = false; await flush(); } writing = null; })();
+  return writing;
+}
+
+export async function openVault(key) {
+  aesKey = key;
+  const raw = localStorage.getItem(VAULT);
+  cache = raw ? JSON.parse(await decrypt(JSON.parse(raw))) : {};
+  // Records saved before the lock existed are plaintext: move them into the vault, then delete them.
+  const legacy = Object.keys(localStorage).filter(k => k.startsWith(PREFIX) && k !== VAULT);
+  if (legacy.length) {
+    for (const k of legacy) { try { cache[k.slice(PREFIX.length)] ??= JSON.parse(localStorage.getItem(k)); } catch { /* skip corrupt */ } }
+    await flush();
+    legacy.forEach(k => localStorage.removeItem(k));
+  }
+}
+
+export const load = (key, fallback) => structuredClone(key in cache ? cache[key] : fallback);
 
 export function save(key, value) {
-  try { localStorage.setItem(PREFIX + key, JSON.stringify(value)); return true; }
-  catch (e) { alert(`Could not save (${e.name}). Browser storage may be full or disabled.`); return false; }
+  cache[key] = structuredClone(value);
+  persist();
+  return true;
 }
 
-export function allData() {
-  const out = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k.startsWith(PREFIX)) out[k.slice(PREFIX.length)] = JSON.parse(localStorage.getItem(k));
-  }
-  return out;
+export const allData = () => structuredClone(cache);
+export function replaceAll(data) {
+  cache = structuredClone(data);
+  return persist();
 }
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -76,7 +115,7 @@ export function csv(rows) {
 export const goto = tab => document.dispatchEvent(new CustomEvent('goto', { detail: tab }));
 export const onTab = (name, fn) => document.addEventListener('tabshown', e => { if (e.detail === name) fn(); });
 
-// ---------- Photos (IndexedDB) ----------
+// ---------- Photos (IndexedDB, encrypted) ----------
 let dbp;
 function db() {
   return dbp ||= new Promise((resolve, reject) => {
@@ -95,16 +134,25 @@ async function tx(mode, fn) {
     t.onerror = () => reject(t.error);
   });
 }
-export const photoPut = (id, data) => tx('readwrite', s => s.put(data, id));
+export async function photoPut(id, data) {
+  const box = await encrypt(data);
+  return tx('readwrite', s => s.put(box, id));
+}
 export const photoDel = id => tx('readwrite', s => s.delete(id));
 export const photoClear = () => tx('readwrite', s => s.clear());
 export async function photoEntries() {
   const d = await db();
-  return new Promise((resolve, reject) => {
+  const rows = await new Promise((resolve, reject) => {
     const t = d.transaction('photos');
     const s = t.objectStore('photos');
     const k = s.getAllKeys(), v = s.getAll();
     t.oncomplete = () => resolve(k.result.map((id, i) => [id, v.result[i]]));
     t.onerror = () => reject(t.error);
   });
+  const out = [];
+  for (const [id, v] of rows) {
+    if (typeof v === 'string') { out.push([id, v]); await photoPut(id, v); continue; } // legacy plaintext → encrypt
+    try { out.push([id, await decrypt(v)]); } catch { /* unreadable with this key */ }
+  }
+  return out;
 }
