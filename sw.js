@@ -1,5 +1,5 @@
 // Offline support: same-origin files are network-first (so updates arrive), CDN libraries cache-first.
-const CACHE = 'research-desk-v2';
+const CACHE = 'research-desk-v3';
 const APP = ['./', 'index.html', 'css/style.css', ...['lock', 'app', 'store', 'calc', 'events', 'dashboard', 'tools', 'report', 'planner', 'timetable', 'tasks', 'milestones', 'venues', 'study', 'lit', 'log'].map(f => `js/${f}.js`)];
 const CDN = [
   'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
@@ -21,7 +21,7 @@ self.addEventListener('fetch', e => {
   if (CDN.includes(req.url)) {
     e.respondWith(caches.match(req.url).then(hit => hit || fetch(req)));
   } else if (url.origin === location.origin) {
-    e.respondWith(fetch(req).then(res => {
+    e.respondWith(fetch(req.url, { cache: 'no-cache' }).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req, { ignoreSearch: true }).then(hit => hit || caches.match('index.html'))));

@@ -25,7 +25,9 @@ async function start(raw) {
   await import('./app.js');
 }
 
-$('lock-now').onclick = () => { sessionStorage.removeItem(SESSION); location.reload(); };
+// Every page load starts locked; clear the session key older versions kept.
+sessionStorage.removeItem(SESSION);
+$('lock-now').onclick = () => location.reload();
 
 const form = $('lock-form');
 function showForm(msg = '') {
@@ -46,7 +48,6 @@ form.addEventListener('submit', async e => {
       form.elements.password.value = '';
       return showForm('Email or password is incorrect.');
     }
-    if (form.elements.remember.checked) sessionStorage.setItem(SESSION, b64e(raw));
     form.elements.password.value = '';
     await start(raw);
   } catch (err) {
@@ -58,7 +59,5 @@ if (!window.crypto?.subtle) {
   showForm('This page must be opened over HTTPS (or localhost) to unlock.');
   form.querySelector('button').disabled = true;
 } else {
-  const saved = sessionStorage.getItem(SESSION);
-  if (saved) start(b64d(saved)).catch(() => { sessionStorage.removeItem(SESSION); showForm(); });
-  else showForm();
+  showForm();
 }
