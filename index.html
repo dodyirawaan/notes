@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="css/style.css">
 <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-<script type="module" src="js/lock.js?v=10"></script>
+<script type="module" src="js/lock.js?v=11"></script>
 </head>
 <body class="locked">
 <div id="lock" class="lock">
@@ -26,7 +26,7 @@
 </div>
 <header class="top">
   <div class="brand"><span class="logo" aria-hidden="true">▲</span><div><strong>Research Desk</strong><small>Private · encrypted in this browser</small></div></div>
-  <div class="toolbar"><button type="button" id="backup" class="ghost">Export all (JSON)</button><button type="button" id="restore" class="ghost">Import</button><button type="button" id="gd-quick" class="ghost">Sync Drive</button><button type="button" id="lock-now" class="ghost">Lock</button></div>
+  <div class="toolbar"><button type="button" id="backup" class="ghost" title="Export all data (encrypted JSON backup)">Export</button><button type="button" id="restore" class="ghost" title="Import a backup file">Import</button><button type="button" id="gd-quick" class="ghost" title="Sync with Google Drive">Sync</button><button type="button" id="lock-now" class="ghost" title="Lock and forget the key on this device">Lock</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Sections">
@@ -178,7 +178,7 @@
 <section id="tab-timetable" role="tabpanel" hidden>
   <div class="card">
     <div class="card-head"><h2>Semester timetable</h2>
-      <div class="toolbar"><button type="button" class="small" id="tt-prev" aria-label="Previous week">‹</button><strong id="tt-week-label"></strong><button type="button" class="small" id="tt-next" aria-label="Next week">›</button><button type="button" class="small" id="tt-now">This week</button></div></div>
+      <div class="toolbar week-nav"><button type="button" class="small" id="tt-prev" aria-label="Previous week">‹</button><strong id="tt-week-label"></strong><button type="button" class="small" id="tt-next" aria-label="Next week">›</button><button type="button" class="small" id="tt-now">This week</button></div></div>
     <p class="muted small-text">Week 1 is the Monday-start week of the semester start date. Classes also show in the Planner and the .ics export.</p>
     <div class="table-wrap"><div class="tt-week" id="tt-grid"></div></div>
     <p class="muted" id="tt-empty" hidden>No classes this week.</p>
