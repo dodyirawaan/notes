@@ -1,9 +1,10 @@
 // Google Drive sync. Everything is encrypted with the login key before upload, so Drive only ever
-// holds an unreadable file (same format as "Export all"). Scope drive.file: the app sees only its own file,
-// plus the folder picked with Google Picker, which is where a new vault file is created.
+// holds an unreadable file (same format as "Export all"), kept in a Drive folder found by name ("notes").
+// Scope drive: needed to list and add files the user already keeps in that folder. The token stays in memory.
 import { load, save, allData, replaceAll, encrypt, decrypt, photoEntries, photoPut, photoClear, debounce, goto, onTab, esc, download } from './store.js';
 
-const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const SCOPE = 'https://www.googleapis.com/auth/drive';
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const FILE = 'research-desk-vault.json';
 const API = 'https://www.googleapis.com/drive/v3';
 const UP = 'https://www.googleapis.com/upload/drive/v3';
@@ -12,7 +13,7 @@ const $ = id => document.getElementById(id);
 
 const conf = () => load('drive', {});
 const setConf = patch => save('drive', { ...conf(), ...patch });
-let token = null, tokenExp = 0, tokenClient = null, pending = null, gsi = null, picker = null, busy = false;
+let token = null, tokenExp = 0, tokenClient = null, pending = null, gsi = null, busy = false;
 
 function status(msg, error = false) {
   const el = $('gd-status');
@@ -26,16 +27,6 @@ function describe() {
   const changed = load('meta.changedAt', 0) > (d.syncedAt || 0) ? ' · local changes not yet uploaded' : '';
   return `${token && Date.now() < tokenExp ? 'Connected' : 'Not connected'} · ${last}${changed}`;
 }
-
-function loadScript(src, done) {
-  return new Promise((resolve, reject) => {
-    const s = Object.assign(document.createElement('script'), { src, async: true });
-    s.onload = () => done(resolve, reject);
-    s.onerror = () => { s.remove(); reject(new Error('Cannot reach Google. Is your VPN on?')); };
-    document.head.append(s);
-  });
-}
-const loadPicker = () => (picker ||= loadScript('https://apis.google.com/js/api.js', (ok, fail) => gapi.load('picker', { callback: ok, onerror: () => fail(new Error('Google Picker failed to load.')) })).catch(e => { picker = null; throw e; }));
 
 function loadGsi() {
   return gsi ||= new Promise((resolve, reject) => {
@@ -59,7 +50,7 @@ function getToken() {
         if (r.error || !google.accounts.oauth2.hasGrantedAllScopes(r, SCOPE)) return pending?.reject(new Error(r.error_description || 'Drive access was not granted.'));
         token = r.access_token;
         tokenExp = Date.now() + Number(r.expires_in) * 1000;
-        if (!conf().consented) setConf({ consented: true });
+        if (conf().consented !== SCOPE) setConf({ consented: SCOPE });
         pending?.resolve(token);
       },
       error_callback: e => pending?.reject(new Error(e.type === 'popup_closed' ? 'The Google window was closed.' : e.type === 'popup_failed_to_open' ? 'Popup blocked: allow popups for this site.' : e.message || e.type)),
@@ -68,7 +59,7 @@ function getToken() {
   }
   return new Promise((resolve, reject) => {
     pending = { resolve, reject };
-    tokenClient.requestAccessToken({ prompt: conf().consented ? '' : 'consent' });
+    tokenClient.requestAccessToken({ prompt: conf().consented === SCOPE ? '' : 'consent' });
   });
 }
 
@@ -85,12 +76,12 @@ async function api(url, opts = {}) {
 async function findFile() {
   const { fileId } = conf();
   if (fileId) {
-    const r = await fetch(`${API}/files/${fileId}?fields=id,modifiedTime,trashed`, { headers: { Authorization: `Bearer ${token}` } });
+    const r = await fetch(`${API}/files/${fileId}?fields=id,modifiedTime,trashed,parents`, { headers: { Authorization: `Bearer ${token}` } });
     if (r.ok) { const f = await r.json(); if (!f.trashed) return f; }
     else if (r.status !== 404) await api(`${API}/files/${fileId}?fields=id`); // surfaces the real error
   }
   const q = encodeURIComponent(`name='${FILE}' and trashed=false`);
-  const { files } = await (await api(`${API}/files?q=${q}&spaces=drive&orderBy=modifiedTime desc&fields=files(id,modifiedTime)`)).json();
+  const { files } = await (await api(`${API}/files?q=${q}&spaces=drive&orderBy=modifiedTime desc&fields=files(id,modifiedTime,parents)`)).json();
   if (files[0]) setConf({ fileId: files[0].id });
   return files[0] || null;
 }
@@ -127,44 +118,46 @@ async function upload(text) {
   return (await api(`${API}/files/${id}?fields=id,modifiedTime`)).json();
 }
 
-// The app may only write into a folder the user picked here (drive.file), so the folder comes from Google Picker.
-function pick(view, multi = false) {
-  return new Promise(resolve => {
-    const b = new google.picker.PickerBuilder().addView(view).setOAuthToken(token).setAppId(conf().clientId.split('-')[0])
-      .setCallback(d => { if (d.action === google.picker.Action.PICKED) resolve(d.docs); else if (d.action === google.picker.Action.CANCEL) resolve([]); });
-    if (multi) b.enableFeature(google.picker.Feature.MULTISELECT_ENABLED);
-    b.build().setVisible(true);
-  });
+// ---------- The Drive folder (found by name; the vault file and the user's files live there) ----------
+const folderName = () => conf().folderName || 'notes';
+const qs = v => v.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+const findFolders = async extra => (await (await api(`${API}/files?q=${encodeURIComponent(`name='${qs(folderName())}' and mimeType='${FOLDER_MIME}' and trashed=false${extra}`)}&spaces=drive&fields=files(id)`)).json()).files;
+
+// Returns the folder id (a folder at the top of My Drive wins) and moves the vault file into it.
+async function folder() {
+  let id = conf().folderId;
+  if (id) {
+    const r = await fetch(`${API}/files/${id}?fields=name,trashed`, { headers: { Authorization: `Bearer ${token}` } });
+    const f = r.ok ? await r.json() : null;
+    if (!f || f.trashed || f.name !== folderName()) id = null;
+  }
+  if (!id) {
+    const [f] = [...await findFolders(" and 'root' in parents"), ...await findFolders('')];
+    if (!f) throw new Error(`There is no folder named “${folderName()}” in your Google Drive.`);
+    id = f.id;
+    setConf({ folderId: id });
+  }
+  const v = await findFile();
+  if (v && !(v.parents || []).includes(id)) {
+    const moved = await (await api(`${API}/files/${v.id}?addParents=${id}&removeParents=${(v.parents || []).join(',')}&fields=id,modifiedTime`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+    if (v.modifiedTime === conf().remoteModified) setConf({ remoteModified: moved.modifiedTime });
+  }
+  return id;
 }
 
-async function chooseFolder() {
-  await loadPicker();
-  const [folder] = await pick(new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-    .setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes('application/vnd.google-apps.folder').setQuery('notes'));
-  if (!folder) return status('No folder chosen. Nothing was changed.');
-  setConf({ folderId: folder.id, folderName: folder.name });
-  showFolder();
-  const f = await findFile();
-  if (f) { // move the existing vault file into the folder
-    const { parents = [] } = await (await api(`${API}/files/${f.id}?fields=parents`)).json();
-    const moved = await (await api(`${API}/files/${f.id}?addParents=${folder.id}&removeParents=${parents.filter(p => p !== folder.id).join(',')}&fields=id,modifiedTime`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
-    if (f.modifiedTime === conf().remoteModified) setConf({ remoteModified: moved.modifiedTime });
-    status(`Moved ${FILE} into “${folder.name}”. ${describe()}`);
-  } else status(`Data will be saved in “${folder.name}” on the next sync. ${describe()}`);
-  await listFiles();
-}
-
-// ---------- Files in the chosen folder (stored as-is, not encrypted) ----------
+// ---------- Files in the folder (stored as-is, not encrypted) ----------
 let files = [];
-const fileStatus = msg => { $('gd-files-status').textContent = msg; };
-const needFolder = () => { if (!conf().folderId) throw new Error('Choose the Drive folder first (“Choose folder…” above).'); };
+function fileStatus(msg, error = false) {
+  const el = $('gd-files-status');
+  el.textContent = msg;
+  el.classList.toggle('error-text', error);
+}
 const fmtSize = n => n == null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`;
 const isGoogleDoc = f => f.mimeType.startsWith('application/vnd.google-apps.');
 
 async function listFiles() {
-  needFolder();
   fileStatus('Loading…');
-  const q = encodeURIComponent(`'${conf().folderId}' in parents and trashed=false and name != '${FILE}'`);
+  const q = encodeURIComponent(`'${await folder()}' in parents and trashed=false and name != '${FILE}'`);
   files = [];
   let page = '';
   do {
@@ -176,25 +169,34 @@ async function listFiles() {
 }
 
 function renderFiles() {
-  $('gd-files').innerHTML = files.map(f => `<tr data-id="${f.id}"><td>${f.mimeType.endsWith('.folder') ? '📁 ' : ''}${esc(f.name)}</td><td>${fmtSize(f.size && Number(f.size))}</td><td>${new Date(f.modifiedTime).toLocaleString()}</td>
-    <td class="row-actions">${f.mimeType.endsWith('.folder') ? '' : `<button type="button" class="small" data-act="get">Download${isGoogleDoc(f) ? ' (PDF)' : ''}</button>`}<a class="btn small" href="${esc(f.webViewLink)}" target="_blank" rel="noopener">Open</a><button type="button" class="small danger" data-act="del">Delete</button></td></tr>`).join('')
-    || '<tr><td colspan="4" class="muted">No files here yet. Upload some, or add files already in the folder.</td></tr>';
-  fileStatus(`${files.length} item${files.length === 1 ? '' : 's'} in “${conf().folderName}”.`);
+  $('gd-files').innerHTML = files.map(f => `<tr data-id="${f.id}"><td>${f.mimeType === FOLDER_MIME ? '📁 ' : ''}${esc(f.name)}</td><td>${fmtSize(f.size && Number(f.size))}</td><td>${new Date(f.modifiedTime).toLocaleString()}</td>
+    <td class="row-actions">${f.mimeType === FOLDER_MIME ? '' : `<button type="button" class="small" data-act="get">Download${isGoogleDoc(f) ? ' (PDF)' : ''}</button>`}<a class="btn small" href="${esc(f.webViewLink)}" target="_blank" rel="noopener">Open</a><button type="button" class="small danger" data-act="del">Delete</button></td></tr>`).join('')
+    || '<tr><td colspan="4" class="muted">The folder is empty.</td></tr>';
+  fileStatus(`${files.length} item${files.length === 1 ? '' : 's'} in “${folderName()}”.`);
 }
 
+const SMALL = 5 * 1048576; // multipart up to 5 MB, resumable above
 async function uploadFiles(list) {
-  needFolder();
+  const parent = await folder();
   let i = 0;
   for (const file of list) {
     fileStatus(`Uploading ${++i}/${list.length}: ${file.name}…`);
     const type = file.type || 'application/octet-stream';
-    const init = await api(`${UP}/files?uploadType=resumable`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': type },
-      body: JSON.stringify({ name: file.name, parents: [conf().folderId] }),
-    });
-    const r = await fetch(init.headers.get('Location'), { method: 'PUT', headers: { 'Content-Type': type }, body: file });
-    if (!r.ok) throw new Error(`Upload of ${file.name} failed (${r.status}).`);
+    const meta = JSON.stringify({ name: file.name, parents: [parent] });
+    if (file.size <= SMALL) {
+      const b = 'rd' + Math.random().toString(36).slice(2);
+      await api(`${UP}/files?uploadType=multipart&fields=id`, {
+        method: 'POST',
+        headers: { 'Content-Type': `multipart/related; boundary=${b}` },
+        body: new Blob([`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${b}\r\nContent-Type: ${type}\r\n\r\n`, file, `\r\n--${b}--`]),
+      });
+    } else {
+      const init = await api(`${UP}/files?uploadType=resumable`, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': type }, body: meta });
+      const session = init.headers.get('Location');
+      if (!session) throw new Error(`Google did not accept the upload of ${file.name}. Try again.`);
+      const r = await fetch(session, { method: 'PUT', headers: { 'Content-Type': type }, body: file });
+      if (!r.ok) throw new Error(`Upload of ${file.name} failed (${r.status}).`);
+    }
   }
   await listFiles();
 }
@@ -207,16 +209,9 @@ async function downloadFile(f) {
   renderFiles();
 }
 
-async function addExisting() {
-  needFolder();
-  await loadPicker();
-  const view = new google.picker.DocsView(google.picker.ViewId.DOCS).setParent(conf().folderId).setIncludeFolders(true);
-  if ((await pick(view, true)).length) await listFiles();
-}
-const showFolder = () => { $('gd-folder').textContent = conf().folderName ? `“${conf().folderName}”` : 'My Drive (top level)'; };
-
 async function push() {
   status('Encrypting and uploading…');
+  try { await folder(); } catch (e) { if (!conf().fileId) throw e; } // an existing vault file is updated where it is
   const f = await upload(await snapshot());
   setConf({ fileId: f.id, remoteModified: f.modifiedTime, syncedAt: Date.now() });
   status(`Uploaded to Google Drive. ${describe()}`);
@@ -235,15 +230,15 @@ async function pull(remote) {
   location.reload();
 }
 
-async function run(job) {
+async function run(job, report = status) {
   if (busy) return;
   busy = true;
   setButtons(true);
   try { await getToken(); await job(); }
-  catch (e) { status(e.message, true); }
+  catch (e) { report(e.message, true); }
   finally { busy = false; setButtons(false); }
 }
-function setButtons(disabled) { for (const id of ['gd-connect', 'gd-sync', 'gd-up', 'gd-down', 'gd-quick', 'gd-folder-btn', 'gd-refresh', 'gd-upload', 'gd-add']) $(id).disabled = disabled; }
+function setButtons(disabled) { for (const id of ['gd-connect', 'gd-sync', 'gd-up', 'gd-down', 'gd-quick', 'gd-refresh', 'gd-upload']) $(id).disabled = disabled; }
 
 async function syncNow() {
   status('Checking Google Drive…');
@@ -284,9 +279,15 @@ cidInput.addEventListener('change', () => {
   if (v) loadGsi().then(() => status(describe()), e => status(e.message, true));
   else status(describe());
 });
-$('gd-folder-btn').onclick = () => run(chooseFolder);
-$('gd-connect').onclick = () => run(async () => status(`Connected to Google Drive. ${describe()}`));
-$('gd-sync').onclick = () => run(syncNow);
+$('gd-folder').value = folderName();
+$('gd-folder').addEventListener('change', e => {
+  setConf({ folderName: e.target.value.trim() || 'notes', folderId: '' });
+  e.target.value = folderName();
+  if (token) run(listFiles, fileStatus);
+});
+const listQuietly = () => listFiles().catch(e => fileStatus(e.message, true));
+$('gd-connect').onclick = () => run(async () => { status(`Connected to Google Drive. ${describe()}`); await listQuietly(); });
+$('gd-sync').onclick = () => run(async () => { await syncNow(); await listQuietly(); });
 $('gd-quick').onclick = () => conf().clientId ? run(syncNow) : goto('sync');
 $('gd-up').onclick = () => { if (confirm('Overwrite the Google Drive copy with this device’s data?')) run(push); };
 $('gd-down').onclick = () => {
@@ -294,25 +295,23 @@ $('gd-down').onclick = () => {
   run(async () => { const r = await findFile(); if (!r) throw new Error('No Research Desk file found in your Google Drive yet.'); await pull(r); });
 };
 
-$('gd-refresh').onclick = () => run(listFiles);
-$('gd-add').onclick = () => run(addExisting);
+$('gd-refresh').onclick = () => run(listFiles, fileStatus);
 $('gd-upload').onclick = () => {
   const input = Object.assign(document.createElement('input'), { type: 'file', multiple: true });
-  input.onchange = () => input.files.length && run(() => uploadFiles([...input.files]));
+  input.onchange = () => input.files.length && run(() => uploadFiles([...input.files]), fileStatus);
   input.click();
 };
 $('gd-files').addEventListener('click', e => {
   const b = e.target.closest('button[data-act]');
   if (!b) return;
   const f = files.find(x => x.id === b.closest('tr').dataset.id);
-  if (b.dataset.act === 'get') run(() => downloadFile(f));
-  else if (confirm(`Move “${f.name}” to the Google Drive trash?`)) run(async () => { await api(`${API}/files/${f.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{"trashed":true}' }); await listFiles(); });
+  if (b.dataset.act === 'get') run(() => downloadFile(f), fileStatus);
+  else if (confirm(`Move “${f.name}” to the Google Drive trash?`)) run(async () => { await api(`${API}/files/${f.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{"trashed":true}' }); await listFiles(); }, fileStatus);
 });
 
 onTab('sync', () => {
   status(describe());
-  if (conf().folderId && token && Date.now() < tokenExp - 60000 && !busy) run(listFiles);
+  if (token && Date.now() < tokenExp - 60000 && !busy) run(listFiles, fileStatus);
 });
-showFolder();
 if (conf().clientId) loadGsi().catch(() => {});
 status(describe());
