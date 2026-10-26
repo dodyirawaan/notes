@@ -1,6 +1,7 @@
 // Gathers calendar events from every source: planner, timetable and conference/journal deadlines.
-import { load, today } from './store.js';
-import { expandEvents, isIsoDate, addDays, weekdayMon0, startOfWeek } from './calc.js';
+import { load } from './store.js';
+import { expandEvents, isIsoDate, addDays, DAY_KEYS, parseWeeks, weekRuns, weekStart } from './calc.js';
+import { PERIODS } from './seed.js';
 
 export const TYPES = {
   class: { label: 'Class', color: '#2b6cb0' },
@@ -12,19 +13,31 @@ export const TYPES = {
   activity: { label: 'Activity', color: '#2f855a' },
   personal: { label: 'Personal', color: '#718096' },
 };
-export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+export const DAYS = DAY_KEYS;
 
 export const userEvents = () => load('events', []).map(e => ({ ...e, source: 'planner' }));
 
+// One weekly series per course slot and run of consecutive teaching weeks.
 export function timetableEvents() {
-  const tt = load('timetable', { termStart: '', termEnd: '', classes: [] });
-  const anchor = isIsoDate(tt.termStart) ? tt.termStart : startOfWeek(today());
-  return tt.classes.map(c => ({
-    id: 'tt-' + c.id, source: 'timetable', type: 'class', repeat: 'weekly',
-    title: c.course, venue: c.room, notes: c.teacher ? `Teacher: ${c.teacher}` : '',
-    date: addDays(anchor, (Number(c.day) - weekdayMon0(anchor) + 7) % 7),
-    start: c.start, end: c.end, until: isIsoDate(tt.termEnd) ? tt.termEnd : '', reminder: c.reminder ?? '',
-  }));
+  const tt = load('timetable', { semesterStart: '', courses: [] });
+  if (!isIsoDate(tt.semesterStart) || !Array.isArray(tt.courses)) return [];
+  const periods = tt.periods?.length ? tt.periods : PERIODS;
+  const time = (p, i) => (periods[p - 1] || '').split('-')[i] || '';
+  const out = [];
+  for (const c of tt.courses) {
+    let runs;
+    try { runs = weekRuns(parseWeeks(c.weeks)); } catch { continue; }
+    c.slots.forEach((s, si) => runs.forEach(([a, b], ri) => {
+      const day = DAY_KEYS.indexOf(s.day);
+      out.push({
+        id: `tt-${c.id}-${si}-${ri}`, source: 'timetable', type: 'class', repeat: 'weekly',
+        title: c.name, venue: c.room, notes: [c.code, c.teacher && `Teacher: ${c.teacher}`, `Periods ${s.from}-${s.to}`].filter(Boolean).join(' · '),
+        date: addDays(weekStart(tt.semesterStart, a), day), until: addDays(weekStart(tt.semesterStart, b), day),
+        start: time(s.from, 0), end: time(s.to, 1), reminder: c.reminder ?? '',
+      });
+    }));
+  }
+  return out;
 }
 
 export function venueEvents() {

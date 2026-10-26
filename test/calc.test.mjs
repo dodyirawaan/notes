@@ -1,6 +1,7 @@
 // Smoke test: node test/calc.test.mjs
 import assert from 'node:assert/strict';
 import * as C from '../js/calc.js';
+import { SEED } from '../js/seed.js';
 
 const near = (a, b, tol = 1e-6) => assert.ok(Math.abs(a - b) <= tol, `${a} ≉ ${b}`);
 
@@ -45,6 +46,31 @@ assert.deepEqual(occ.map(o => `${o.id}:${o.date}`), ['w:2026-10-05', 'w:2026-10-
 
 const wk = C.weeklyTotals([{ date: '2026-10-26', hours: 2 }, { date: '2026-10-27', hours: 1.5 }, { date: '2026-10-19', hours: 3 }], '2026-10-28', 2);
 assert.deepEqual(wk, [{ week: '2026-10-19', hours: 3 }, { week: '2026-10-26', hours: 3.5 }]);
+
+// Semester timetable (seed data): week 1 = 2026-09-07 ~ 2026-09-13, Monday start.
+const S = SEED.semesterStart;
+assert.deepEqual(C.weekRange(S, 1), { from: '2026-09-07', to: '2026-09-13' });
+assert.deepEqual(C.weekRange(S, 2), { from: '2026-09-14', to: '2026-09-20' });
+assert.deepEqual(C.weekRange(S, 11), { from: '2026-11-16', to: '2026-11-22' });
+assert.deepEqual(C.weekRange(S, 16), { from: '2026-12-21', to: '2026-12-27' });
+assert.deepEqual(C.weekRange(S, 17), { from: '2026-12-28', to: '2027-01-03' });
+assert.equal(C.weekOf(S, '2026-09-13'), 1);
+assert.equal(C.weekOf(S, '2026-11-16'), 11);
+assert.equal(C.totalCredits(SEED.courses), 10);
+const sess = code => C.courseSessions(SEED.courses.find(c => c.code === code), S).map(s => `${s.day} ${s.date} ${s.from}-${s.to}`);
+const ends = code => { const l = sess(code); return [l[0], l.at(-1)]; };
+assert.deepEqual(ends('330005YS'), ['Mon 2026-09-14 1-2', 'Thu 2026-12-31 9-10']);
+assert.deepEqual(ends('020012YS'), ['Mon 2026-11-16 5-8', 'Thu 2026-12-24 1-4']);
+assert.deepEqual(ends('020009YS'), ['Tue 2026-11-17 5-8', 'Thu 2026-12-24 5-8']);
+assert.equal(sess('330005YS').length, 32);
+assert.deepEqual(C.weekSessions(SEED, 1), []);
+assert.deepEqual([...new Set(C.weekSessions(SEED, 2).map(s => s.course.code))], ['330005YS']);
+assert.deepEqual(C.parseWeeks('1,3, 5-7'), [1, 3, 5, 6, 7]);
+assert.deepEqual(C.weekRuns([2, 3, 4, 7]), [[2, 4], [7, 7]]);
+assert.deepEqual(C.parseSlots('tue 5-8, Thursday 9'), [{ day: 'Tue', from: 5, to: 8 }, { day: 'Thu', from: 9, to: 9 }]);
+assert.equal(C.formatSlots(SEED.courses[0].slots), 'Tue 5-8, Thu 5-8');
+assert.throws(() => C.parseWeeks('5-2'), RangeError);
+assert.throws(() => C.parseSlots('Xyz 1-2'), RangeError);
 
 // ICS
 const ics = C.buildICS([

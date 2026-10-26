@@ -168,10 +168,19 @@ dialog h3 { margin: 0; }
 .dlg-actions #ev-delete { margin-left: auto; }
 
 /* Timetable */
-.tt-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
-.tt-day { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-width: 0; }
-.tt-item { border-left: 3px solid #2b6cb0; background: #ebf4ff; border-radius: 4px; padding: 6px; margin-bottom: 6px; display: flex; flex-direction: column; gap: 2px; font-size: .82rem; overflow-wrap: anywhere; }
+.tt-week { display: grid; grid-template-columns: 3.4rem repeat(7, minmax(84px, 1fr)); min-width: 680px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: .8rem; }
+.tt-head, .tt-corner { grid-row: 1; background: var(--soft); color: var(--navy); font-weight: 600; text-align: center; padding: 4px; border-bottom: 1px solid var(--line); }
+.tt-head small { display: block; font-weight: 400; color: var(--muted); }
+.tt-head.today { background: var(--navy); color: #fff; }
+.tt-head.today small { color: #dbe6f3; }
+.tt-period { grid-column: 1; text-align: center; color: var(--muted); border-top: 1px solid var(--line); padding: 2px; line-height: 1.2; }
+.tt-period b { display: block; color: var(--ink); }
+.tt-period small { font-size: .68rem; }
+.tt-cell { border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.tt-item { --c: #2b6cb0; position: relative; margin: 2px; border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) 12%, #fff); border-radius: 4px; padding: 4px 6px; display: flex; flex-direction: column; gap: 1px; overflow-wrap: anywhere; min-width: 0; }
+.tt-item b { color: var(--ink); font-weight: 600; }
 .tt-item small { color: var(--muted); }
+.tt-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); margin-right: 6px; }
 
 /* Kanban */
 .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
@@ -221,7 +230,7 @@ dialog h3 { margin: 0; }
 @media (max-width: 760px) {
   .grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .two, .board { grid-template-columns: 1fr; }
-  .db-week, .cal.week, .tt-grid { grid-template-columns: 1fr; }
+  .db-week, .cal.week { grid-template-columns: 1fr; }
   .db-day, .wday { min-height: 0; }
   .day { min-height: 64px; }
   .chip { font-size: 0; height: 6px; padding: 0; border-left-width: 0; background: var(--c); }

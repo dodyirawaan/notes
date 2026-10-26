@@ -1,6 +1,6 @@
 // Offline support: same-origin files are network-first (so updates arrive), CDN libraries cache-first.
-const CACHE = 'research-desk-v6';
-const APP = ['./', 'index.html', 'css/style.css', ...['lock', 'app', 'store', 'calc', 'events', 'dashboard', 'tools', 'report', 'planner', 'timetable', 'tasks', 'milestones', 'venues', 'study', 'lit', 'log', 'drive'].map(f => `js/${f}.js`)];
+const CACHE = 'research-desk-v7';
+const APP = ['./', 'index.html', 'css/style.css', ...['lock', 'app', 'store', 'calc', 'events', 'dashboard', 'tools', 'report', 'planner', 'timetable', 'tasks', 'milestones', 'venues', 'study', 'lit', 'log', 'drive', 'seed'].map(f => `js/${f}.js`)];
 const CDN = [
   'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
   'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js',

@@ -110,6 +110,56 @@ export function expandEvents(events, from, to) {
   return out.sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''));
 }
 
+// ---------- Semester timetable (week 1 is the Monday-start week containing semesterStart) ----------
+export const DAY_KEYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+// "2-17", "1,3,5-9" → sorted unique week numbers.
+export function parseWeeks(spec) {
+  const out = new Set();
+  for (const part of String(spec ?? '').split(/[,，\s]+/).filter(Boolean)) {
+    const m = part.match(/^(\d+)(?:-(\d+))?$/);
+    const a = m && Number(m[1]), b = m && Number(m[2] ?? m[1]);
+    if (!m || a < 1 || b < a) throw new RangeError(`Bad week range "${part}"`);
+    for (let w = a; w <= b; w++) out.add(w);
+  }
+  return [...out].sort((x, y) => x - y);
+}
+// [2,3,4,7] → [[2,4],[7,7]]
+export function weekRuns(weeks) {
+  const runs = [];
+  for (const w of weeks) {
+    const last = runs.at(-1);
+    if (last && w === last[1] + 1) last[1] = w; else runs.push([w, w]);
+  }
+  return runs;
+}
+// "Tue 5-8, Thu 9" ⇄ [{day:'Tue',from:5,to:8},{day:'Thu',from:9,to:9}]
+export function parseSlots(spec) {
+  return String(spec ?? '').split(/[,;，；]+/).map(s => s.trim()).filter(Boolean).map(s => {
+    const m = s.match(/^([A-Za-z]{3})\w*\s*(\d+)(?:\s*-\s*(\d+))?$/);
+    const day = m && DAY_KEYS.find(d => d.toLowerCase() === m[1].toLowerCase());
+    const from = m && Number(m[2]), to = m && Number(m[3] ?? m[2]);
+    if (!day || from < 1 || to < from) throw new RangeError(`Bad slot "${s}" (use e.g. "Tue 5-8")`);
+    return { day, from, to };
+  });
+}
+export const formatSlots = slots => slots.map(s => `${s.day} ${s.from === s.to ? s.from : `${s.from}-${s.to}`}`).join(', ');
+
+export const weekStart = (semesterStart, n) => addDays(startOfWeek(semesterStart), 7 * (n - 1));
+export const weekRange = (semesterStart, n) => ({ from: weekStart(semesterStart, n), to: addDays(weekStart(semesterStart, n), 6) });
+export const weekOf = (semesterStart, iso) => Math.floor(daysBetween(startOfWeek(semesterStart), iso) / 7) + 1;
+
+// Every class meeting of one course, in date order.
+export function courseSessions(course, semesterStart) {
+  const out = [];
+  for (const week of parseWeeks(course.weeks)) {
+    for (const s of course.slots) out.push({ course, week, day: s.day, from: s.from, to: s.to, date: addDays(weekStart(semesterStart, week), DAY_KEYS.indexOf(s.day)) });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.from - b.from);
+}
+export const weekSessions = (tt, n) => tt.courses.flatMap(c => courseSessions(c, tt.semesterStart).filter(s => s.week === n));
+export const totalCredits = courses => courses.reduce((t, c) => t + (Number(c.credits) || 0), 0);
+
 // Weekly hour totals (weeks start Monday) for the `weeks` weeks ending with the week of todayIso.
 export function weeklyTotals(entries, todayIso, weeks = 12) {
   const first = addDays(startOfWeek(todayIso), -7 * (weeks - 1));
