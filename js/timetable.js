@@ -1,22 +1,27 @@
 // Semester timetable: courses meet in numbered periods during listed teaching weeks.
 // They show in the calendar as weekly repeats (see events.js).
-import { load, save, uid, esc, today, fmtDate, onTab } from './store.js';
-import { DAY_KEYS, isIsoDate, addDays, parseWeeks, parseSlots, formatSlots, weekRange, weekOf, weekSessions, courseSessions, totalCredits } from './calc.js';
-import { SEED, PERIODS } from './seed.js';
+import { load, save, uid, esc, today, fmtDate, onTab, download, readFile } from './store.js';
+import { DAY_KEYS, isIsoDate, addDays, startOfWeek, parseWeeks, parseSlots, formatSlots, weekRange, weekOf, weekSessions, courseSessions, totalCredits, normalizeTimetable } from './calc.js';
+import { PERIODS } from './seed.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#2b6cb0', '#2f855a', '#b7791f', '#6b46c1', '#c53030', '#2c7a7b', '#b83280'];
-const fromSeed = () => ({ ...structuredClone(SEED), courses: SEED.courses.map(c => ({ ...structuredClone(c), id: uid() })) });
+const withIds = t => ({ ...t, courses: t.courses.map(c => ({ ...c, id: uid() })) });
+const withoutIds = t => ({ semesterStart: t.semesterStart, courses: t.courses.map(({ id, ...c }) => c) });
+const seed = () => load('timetable.seed', null);
 
-// First run (nothing stored, or the old empty time-based timetable) loads the seed.
+// The seed (real course data) lives only in the encrypted vault, never in this public repo.
+// First run (nothing stored, or the old empty time-based timetable) starts from it, or empty.
 let tt = load('timetable', null);
-if (!tt || (!Array.isArray(tt.courses) && !tt.classes?.length)) save('timetable', tt = fromSeed());
+if (!tt || (!Array.isArray(tt.courses) && !tt.classes?.length)) save('timetable', tt = seed() ? withIds(seed()) : { semesterStart: startOfWeek(today()), courses: [] });
 else if (!Array.isArray(tt.courses)) save('timetable', tt = migrate(tt));
+// Vaults seeded by the former public seed file keep that timetable as their seed.
+else if (!seed() && tt.courses.length) save('timetable.seed', withoutIds(tt));
 
 // Old timetable stored clock times; map each class onto the periods it overlaps.
 function migrate(old) {
   const p = PERIODS.map(x => x.split('-'));
-  const start = isIsoDate(old.termStart) ? old.termStart : SEED.semesterStart;
+  const start = isIsoDate(old.termStart) ? old.termStart : startOfWeek(today());
   const last = isIsoDate(old.termEnd) ? Math.max(1, weekOf(start, old.termEnd)) : 20;
   return {
     semesterStart: start,
@@ -55,15 +60,28 @@ $('tt-periods').addEventListener('change', e => {
 $('tt-prev').onclick = () => { week = Math.max(1, week - 1); renderWeek(); };
 $('tt-next').onclick = () => { week += 1; renderWeek(); };
 $('tt-now').onclick = () => { week = currentWeek(); renderWeek(); };
-$('tt-reset').onclick = () => {
-  if (!confirm('Replace the whole timetable (courses, semester start and period times) with the seed timetable?')) return;
-  tt = fromSeed();
+function replaceWith(t) {
+  tt = withIds(t);
   persist();
   $('tt-start').value = tt.semesterStart;
   $('tt-periods').value = periods().join('\n');
   week = currentWeek();
   render();
+}
+$('tt-reset').onclick = () => {
+  if (confirm('Replace the whole timetable (courses, semester start and period times) with the seed timetable?')) replaceWith(seed());
 };
+function importJson(text) {
+  let t;
+  try { t = normalizeTimetable(JSON.parse(text)); } catch (e) { return alert(`Import failed: ${e instanceof SyntaxError ? 'not valid JSON' : e.message}`); }
+  if (tt.courses.length && !confirm(`Replace the current timetable with ${t.courses.length} imported courses? They also become the seed for “Reset to seed”.`)) return;
+  save('timetable.seed', t);
+  replaceWith(t);
+  $('tt-json').value = '';
+}
+$('tt-import').onclick = () => importJson($('tt-json').value);
+$('tt-import-file').onclick = () => readFile().then(importJson, () => {});
+$('tt-export').onclick = () => download(`timetable-${today()}.json`, JSON.stringify(withoutIds(tt), null, 2));
 
 function renderWeek() {
   const { from, to } = weekRange(tt.semesterStart, week);
@@ -97,6 +115,7 @@ function renderCourses() {
       <td class="row-actions"><button type="button" class="small" data-act="edit">Edit</button><button type="button" class="small danger" data-act="del">Delete</button></td></tr>`;
   }).join('') || '<tr><td colspan="8" class="muted">No courses yet.</td></tr>';
   $('tt-credits').textContent = totalCredits(tt.courses);
+  $('tt-reset').hidden = !seed();
 }
 
 function render() { renderWeek(); renderCourses(); }

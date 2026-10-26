@@ -1,7 +1,6 @@
 // Smoke test: node test/calc.test.mjs
 import assert from 'node:assert/strict';
 import * as C from '../js/calc.js';
-import { SEED } from '../js/seed.js';
 
 const near = (a, b, tol = 1e-6) => assert.ok(Math.abs(a - b) <= tol, `${a} ≉ ${b}`);
 
@@ -47,7 +46,16 @@ assert.deepEqual(occ.map(o => `${o.id}:${o.date}`), ['w:2026-10-05', 'w:2026-10-
 const wk = C.weeklyTotals([{ date: '2026-10-26', hours: 2 }, { date: '2026-10-27', hours: 1.5 }, { date: '2026-10-19', hours: 3 }], '2026-10-28', 2);
 assert.deepEqual(wk, [{ week: '2026-10-19', hours: 3 }, { week: '2026-10-26', hours: 3.5 }]);
 
-// Semester timetable (seed data): week 1 = 2026-09-07 ~ 2026-09-13, Monday start.
+// Semester timetable: the seed's weeks and slots (names, teachers and rooms stay out of this public repo).
+// Week 1 = 2026-09-07 ~ 2026-09-13, Monday start.
+const SEED = C.normalizeTimetable({
+  semesterStart: '2026-09-07',
+  courses: [
+    { code: '020009YS', name: 'Course A', credits: 3, weeks: '11-16', slots: [{ day: 'Tue', from: 5, to: 8 }, { day: 'Thu', from: 5, to: 8 }] },
+    { code: '020012YS', name: 'Course B', credits: 3, weeks: '11-16', slots: [{ day: 'Mon', from: 5, to: 8 }, { day: 'Thu', from: 1, to: 4 }] },
+    { code: '330005YS', name: 'Course C', credits: 4, weeks: '2-17', slots: 'Mon 1-2, Thu 9-10' },
+  ],
+});
 const S = SEED.semesterStart;
 assert.deepEqual(C.weekRange(S, 1), { from: '2026-09-07', to: '2026-09-13' });
 assert.deepEqual(C.weekRange(S, 2), { from: '2026-09-14', to: '2026-09-20' });
@@ -71,6 +79,8 @@ assert.deepEqual(C.parseSlots('tue 5-8, Thursday 9'), [{ day: 'Tue', from: 5, to
 assert.equal(C.formatSlots(SEED.courses[0].slots), 'Tue 5-8, Thu 5-8');
 assert.throws(() => C.parseWeeks('5-2'), RangeError);
 assert.throws(() => C.parseSlots('Xyz 1-2'), RangeError);
+assert.throws(() => C.normalizeTimetable({ semesterStart: '2026-09-07', courses: [{ name: 'X', weeks: '1-2', slots: [] }] }), RangeError);
+assert.throws(() => C.normalizeTimetable({ courses: [] }), RangeError);
 
 // ICS
 const ics = C.buildICS([

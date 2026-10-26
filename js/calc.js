@@ -158,6 +158,18 @@ export function courseSessions(course, semesterStart) {
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.from - b.from);
 }
 export const weekSessions = (tt, n) => tt.courses.flatMap(c => courseSessions(c, tt.semesterStart).filter(s => s.week === n));
+// Checks an imported timetable JSON and returns it in the stored shape (without ids).
+export function normalizeTimetable(t) {
+  if (!t || !isIsoDate(t.semesterStart) || !Array.isArray(t.courses)) throw new RangeError('Need "semesterStart" (yyyy-mm-dd) and a "courses" list.');
+  const courses = t.courses.map((c, i) => {
+    if (!c?.name) throw new RangeError(`Course ${i + 1} has no name.`);
+    parseWeeks(c.weeks);
+    const slots = Array.isArray(c.slots) ? parseSlots(formatSlots(c.slots)) : parseSlots(c.slots);
+    if (!slots.length) throw new RangeError(`${c.name} has no slots.`);
+    return { code: String(c.code ?? ''), name: String(c.name), teacher: String(c.teacher ?? ''), credits: Number(c.credits) || 0, weeks: String(c.weeks), slots, room: String(c.room ?? ''), reminder: c.reminder ?? '' };
+  });
+  return { semesterStart: t.semesterStart, courses };
+}
 export const totalCredits = courses => courses.reduce((t, c) => t + (Number(c.credits) || 0), 0);
 
 // Weekly hour totals (weeks start Monday) for the `weeks` weeks ending with the week of todayIso.

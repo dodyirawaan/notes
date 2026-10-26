@@ -75,7 +75,10 @@ function getToken() {
 async function api(url, opts = {}) {
   const r = await fetch(url, { ...opts, headers: { Authorization: `Bearer ${token}`, ...opts.headers } });
   if (r.status === 401) { token = null; throw new Error('Google session expired. Click again to reconnect.'); }
-  if (!r.ok) throw new Error(`Google Drive error ${r.status}: ${(await r.text()).slice(0, 160)}`);
+  if (!r.ok) { // show Google's short message only, never the raw response
+    const msg = await r.json().then(j => j.error?.message, () => '');
+    throw new Error(`Google Drive error ${r.status}${msg ? `: ${String(msg).slice(0, 120)}` : ''}`);
+  }
   return r;
 }
 

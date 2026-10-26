@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="css/style.css">
 <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-<script type="module" src="js/lock.js?v=8"></script>
+<script type="module" src="js/lock.js?v=9"></script>
 </head>
 <body class="locked">
 <div id="lock" class="lock">
@@ -84,7 +84,7 @@
   <div class="card">
     <h2>Google Drive sync</h2>
     <p class="muted">Data is encrypted on this device with your login before it is uploaded, so Google stores only an unreadable file (<code>research-desk-vault.json</code>), kept in the Drive folder you choose. On another device: open this site, sign in with the same email and password, paste the same Client ID and click “Sync now”. Needs a connection that can reach Google (VPN in mainland China).</p>
-    <label>OAuth Client ID<input id="gd-client" placeholder="1234567890-abc.apps.googleusercontent.com" autocomplete="off" spellcheck="false"></label>
+    <label>OAuth Client ID<input id="gd-client" class="masked" placeholder="1234567890-abc.apps.googleusercontent.com" autocomplete="off" spellcheck="false"></label>
     <div class="toolbar" style="margin-top:12px"><span class="muted">Drive folder: <b id="gd-folder"></b></span><button type="button" class="small" id="gd-folder-btn">Choose folder…</button></div>
     <div class="toolbar" style="margin-top:12px">
       <button type="button" class="primary" id="gd-sync">Sync now</button>
@@ -183,7 +183,7 @@
     <p class="muted" id="tt-empty" hidden>No classes this week.</p>
   </div>
   <div class="card">
-    <div class="card-head"><h2>Courses · <span id="tt-credits">0</span> credits</h2><button type="button" class="small danger" id="tt-reset">Reset to seed</button></div>
+    <div class="card-head"><h2>Courses · <span id="tt-credits">0</span> credits</h2><div class="toolbar"><button type="button" class="small" id="tt-export">Export JSON</button><button type="button" class="small danger" id="tt-reset">Reset to seed</button></div></div>
     <div class="table-wrap"><table class="data"><thead><tr><th>Code</th><th>Course</th><th>Teacher</th><th>Credits</th><th>Weeks</th><th>Slots (day periods)</th><th>Room</th><th></th></tr></thead><tbody id="tt-courses"></tbody></table></div>
     <form id="tt-form" class="grid four form-box">
       <input type="hidden" name="id">
@@ -204,6 +204,11 @@
       <label>Semester start (week 1)<input type="date" id="tt-start"></label>
       <label>Period times (one per line, period 1 first)<textarea id="tt-periods" rows="6" spellcheck="false"></textarea></label>
     </div>
+    <details class="form-details"><summary>Import timetable (JSON)</summary>
+      <p class="muted small-text">Paste or load a timetable like <code>{"semesterStart":"2026-09-07","courses":[{"code":"…","name":"…","teacher":"…","credits":3,"weeks":"11-16","slots":[{"day":"Tue","from":5,"to":8}],"room":"…"}]}</code>. It is stored only in this browser’s encrypted data and becomes the seed for “Reset to seed”.</p>
+      <textarea id="tt-json" rows="6" spellcheck="false" autocomplete="off"></textarea>
+      <div class="toolbar" style="margin-top:8px"><button type="button" class="primary small" id="tt-import">Import</button><button type="button" class="small" id="tt-import-file">Load file…</button></div>
+    </details>
   </div>
 </section>
 
@@ -382,6 +387,6 @@
   </div>
 </section>
 </main>
-<footer class="foot">Research Desk · works offline · your data never leaves this browser</footer>
+<footer class="foot">Research Desk · works offline · your data is encrypted before it leaves this browser</footer>
 </body>
 </html>
